@@ -14,8 +14,6 @@ import (
 
 	"net/url"
 
-	"github.com/oldkingnearby/odkutils"
-
 	"time"
 
 	"os"
@@ -916,6 +914,43 @@ func (ohc *OdkHttpClient) UploadFile(urlAdd string, filePath string, progressVal
 	return
 }
 
+type WriteCounter struct {
+	Total     uint64
+	lastTotal uint64
+	lastTime  int64
+	speed     float64
+}
+
+func (wc *WriteCounter) Write(p []byte) (int, error) {
+	n := len(p)
+	wc.Total += uint64(n)
+	wc.PrintProgress()
+	return n, nil
+}
+
+func (wc *WriteCounter) PrintProgress() {
+	nowTime := time.Now().UnixNano()
+	if nowTime-wc.lastTime > 1e6 {
+		wc.speed = float64(wc.Total-wc.lastTotal) * 1e6 / float64(nowTime-wc.lastTime)
+		// Clear the line by using a character return to go back to the start and remove
+		// the remaining characters by filling it with spaces
+		fmt.Printf("\r%s", strings.Repeat(" ", 50))
+		// Return again and print current status of download
+		// We use the humanize package to print the bytes in a meaningful way (e.g. 10 MB)
+		if wc.Total > 1000000000 {
+			fmt.Printf("\r下载中... 已完成%.2f Gb 下载速度:%.2f Kb/s", float64(wc.Total)/1000000000.0, wc.speed)
+		} else if wc.Total > 1000000 {
+			fmt.Printf("\r下载中... 已完成%.2f Mb 下载速度:%.2f Kb/s", float64(wc.Total)/1000000.0, wc.speed)
+		} else if wc.Total > 1000 {
+			fmt.Printf("\r下载中... 已完成%.2f Kb 下载速度:%.2f Kb/s", float64(wc.Total)/1000.0, wc.speed)
+		}
+
+		wc.lastTime = nowTime
+		wc.lastTotal = wc.Total
+	}
+
+}
+
 // 下载文件
 func (ohc *OdkHttpClient) DownloadFile(filePath string, urlAdd string) (err error) {
 	// //fmt.Println("开始下载：", url)
@@ -939,7 +974,7 @@ func (ohc *OdkHttpClient) DownloadFile(filePath string, urlAdd string) (err erro
 	defer resp.Body.Close()
 
 	// Create our progress reporter and pass it to be used alongside our writer
-	counter := &odkutils.WriteCounter{}
+	counter := &WriteCounter{}
 	_, err = io.Copy(out, io.TeeReader(resp.Body, counter))
 	if err != nil {
 		return err
