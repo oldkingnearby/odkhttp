@@ -783,6 +783,11 @@ func (ohc *OdkHttpClient) PathGet(path string, params map[string]interface{}) (r
 	resp, err = ohc.Get(ohc.BaseUrl+path, params)
 	return
 }
+func (ohc *OdkHttpClient) PathGetWithHeader(path string, params map[string]interface{}, header map[string]string) (resp []byte, err error) {
+	resp, err = ohc.GetWithHeader(ohc.BaseUrl+path, params, header)
+	return
+}
+
 func (ohc *OdkHttpClient) PathGetSortParams(path string, paramkeyvalues ...string) (resp []byte, err error) {
 	resp, err = ohc.GetSortParams(ohc.BaseUrl+path, paramkeyvalues...)
 	return
