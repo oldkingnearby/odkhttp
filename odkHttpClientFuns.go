@@ -12,11 +12,13 @@ import (
 	"io"
 	"io/ioutil"
 
+	"mime/multipart"
+	"path/filepath"
+
 	"net/url"
 
-	"time"
-
 	"os"
+	"time"
 
 	"net/http"
 	"net/http/cookiejar"
@@ -59,7 +61,6 @@ func (ohc *OdkHttpClient) init() {
 	ohc.header = make(map[string]string)
 	ohc.client.Jar = jar
 	ohc.contentType = APPLICATION_JSON
-
 }
 
 // 初始化client
@@ -115,10 +116,12 @@ func (ohc *OdkHttpClient) Get(urladd string, params interface{}) (resp []byte, e
 		return
 	}
 	//此处还可以写req.Header.Set("User-Agent", "myClient")
+
 	ohc.mutx.Lock()
 	for k, v := range ohc.header {
 		req.Header[k] = []string{v}
 	}
+
 	ohc.mutx.Unlock()
 
 	// 检测是否需要签名
@@ -783,6 +786,7 @@ func (ohc *OdkHttpClient) PathGet(path string, params map[string]interface{}) (r
 	resp, err = ohc.Get(ohc.BaseUrl+path, params)
 	return
 }
+
 func (ohc *OdkHttpClient) PathGetWithHeader(path string, params map[string]interface{}, header map[string]string) (resp []byte, err error) {
 	resp, err = ohc.GetWithHeader(ohc.BaseUrl+path, params, header)
 	return
@@ -916,6 +920,53 @@ func (ohc *OdkHttpClient) UploadFile(urlAdd string, filePath string, progressVal
 	}
 	defer response.Body.Close()
 	resp, err = ioutil.ReadAll(response.Body)
+	return
+}
+
+// 上传文件
+func (ohc *OdkHttpClient) UploadFileV2(urlAdd string, path string) (retBytes []byte, err error) {
+	// key:file 里面放一个文件
+	// multipart/form-data 传一个文件
+	client := http.Client{}
+
+	r, w := io.Pipe()
+	m := multipart.NewWriter(w)
+	go func() {
+		defer w.Close()
+		defer m.Close()
+		part, err := m.CreateFormFile("file", filepath.Base(path))
+		if err != nil {
+			return
+		}
+		file, err := os.Open(path)
+		if err != nil {
+			return
+		}
+		defer file.Close()
+		if _, err = io.Copy(part, file); err != nil {
+			return
+		}
+	}()
+
+	// 创建请求
+	req, err := http.NewRequest("POST", urlAdd, r)
+	if err != nil {
+		return
+	}
+	req.Header.Set("Content-Type", m.FormDataContentType())
+
+	for key, value := range ohc.header {
+		req.Header.Set(key, value)
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return
+	}
+	defer resp.Body.Close()
+	retBytes, err = ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return
+	}
 	return
 }
 
